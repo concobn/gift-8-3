@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Secure Access · connecting...</title>
+<style>
+  :root{
+    --green:#00ff66;
+    --dark:#000;
+    --panel-bg:rgba(0,0,0,0.6);
+  }
+  html,body{height:100%;margin:0;background:#000;font-family:monospace;color:var(--green);overflow:hidden}
+  canvas{position:fixed;inset:0;z-index:0}
+  #ui{position:relative;z-index:2;padding:22px;pointer-events:auto}
+  #panel{
+    position:absolute;left:20px;top:20px;width:420px;
+    background:var(--panel-bg);padding:14px;border-radius:8px;border:1px solid rgba(0,255,102,0.06);
+    box-shadow:0 6px 24px rgba(0,0,0,0.7)
+  }
+  #title{font-size:18px;margin-bottom:6px}
+  #rows{font-size:13px;line-height:1.4}
+  .label{color:rgba(0,255,102,0.85)}
+  #progressBox{width:100%;height:12px;border:1px solid rgba(0,255,102,0.2);margin-top:10px;border-radius:4px;overflow:hidden}
+  #progress{height:100%;width:0;background:linear-gradient(90deg,#00ff66,#00aaff)}
+  #percent{margin-top:6px;font-weight:bold}
+  #logs{margin-top:12px;height:160px;overflow:auto;background:rgba(0,0,0,0.4);padding:8px;border-radius:6px;border:1px dashed rgba(0,255,102,0.06);font-size:12px}
+  #countdown{display:none;margin-top:10px;color:#ff4444;font-size:20px;font-weight:bold}
+  #cam{position:fixed;right:18px;bottom:18px;width:260px;height:160px;border:2px solid rgba(0,255,102,0.15);border-radius:6px;display:none;z-index:3}
+  #panic{margin-top:10px;padding:8px;border-radius:6px;background:#111;color:var(--green);cursor:pointer;border:1px solid rgba(0,255,102,0.08)}
+  #bigAlert{position:fixed;left:0;top:0;width:100%;height:100%;background:#ff0000;opacity:0;pointer-events:none;z-index:1}
+  .glitch{color:#ff6666;font-weight:bold;animation:glitch 0.18s infinite}
+  @keyframes glitch{
+    0%{transform:translate(2px,0)}
+    25%{transform:translate(-2px,2px)}
+    50%{transform:translate(2px,-2px)}
+    75%{transform:translate(-2px,0)}
+    100%{transform:translate(0,2px)}
+  }
+  /* small responsive */
+  @media(max-width:600px){
+    #panel{left:10px;right:10px;width:auto}
+    #cam{display:none}
+  }
+</style>
+</head>
+<body>
+<canvas id="matrix"></canvas>
+
+<div id="bigAlert"></div>
+
+<div id="ui">
+  <div id="panel">
+    <div id="title">⚡ Secure Connection · Initializing...</div>
+    <div id="rows">
+      <div><span class="label">IP:</span> <span id="ip">Detecting...</span></div>
+      <div><span class="label">Location:</span> <span id="location">Detecting...</span></div>
+      <div><span class="label">Device:</span> <span id="deviceInfo">Browser</span></div>
+      <div id="status"><span class="label">Status:</span> <span id="statustxt">Handshake</span></div>
+
+      <div id="progressBox"><div id="progress"></div></div>
+      <div id="percent">0%</div>
+
+      <div id="logs" aria-live="polite"></div>
+
+      <div id="countdown">DATA WIPE IN: <span id="countnum">10</span>s</div>
+
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button id="panic">STOP · Turn Off</button>
+        <button id="simulateCam">Try Camera</button>
+        <button id="simulateGeo">Try Location</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<video id="cam" autoplay muted playsinline></video>
+
+<!-- sounds (externals, permissive) -->
+<audio id="sfx-alarm" loop preload="auto">
+  <source src="https://www.soundjay.com/misc/sounds/buzzer-1.mp3" type="audio/mpeg">
+</audio>
+<audio id="sfx-bip" preload="auto">
+  <source src="https://www.soundjay.com/button/sounds/beep-07.mp3" type="audio/mpeg">
+</audio>
+
+<script>
+/* ---------------- MATRIX EFFECT ---------------- */
+const canvas = document.getElementById('matrix');
+const ctx = canvas.getContext('2d');
+function resizeCanvas(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+const letters = "01ABCDEF23456789QWERTYUIOPASDFGHJKLZXCVBNM";
+const fontSize = 14;
+let columns = Math.floor(canvas.width / fontSize);
+let drops = new Array(columns).fill(1);
+
+function draw(){
+  ctx.fillStyle = "rgba(0,0,0,0.06)";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#00ff66";
+  ctx.font = fontSize + "px monospace";
+  for(let i=0;i<drops.length;i++){
+    const text = letters[Math.floor(Math.random()*letters.length)];
+    ctx.fillText(text, i*fontSize, drops[i]*fontSize);
+    if(drops[i]*fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+    drops[i]++;
+  }
+}
+setInterval(draw, 33);
+
+/* --------------- UI / Fake Process --------------- */
+const logsEl = document.getElementById('logs');
+const progressEl = document.getElementById('progress');
+const percentEl = document.getElementById('percent');
+const statusTxt = document.getElementById('statustxt');
+const countdownEl = document.getElementById('countdown');
+const countnum = document.getElementById('countnum');
+const bigAlert = document.getElementById('bigAlert');
+
+let percent = 0;
+let logLines = [
+  "Establishing encrypted tunnel...",
+  "Handshake complete",
+  "Bypassing outer proxy...",
+  "Pivoting to internal subnet...",
+  "Enumerating connected devices...",
+  "Harvesting cached credentials...",
+  "Packaging payload...",
+  "Preparing fake exfiltration...",
+  "Uploading (simulated) 0 of 42 files...",
+  "Triggering final stage..."
+];
+
+function appendLog(t){
+  logsEl.innerHTML += "&gt; " + t + "<br>";
+  logsEl.scrollTop = logsEl.scrollHeight;
+}
+
+logLines.forEach((l,i)=>{
+  setTimeout(()=>appendLog(l), 600*i + 200);
+});
+
+function stepProgress(){
+  percent += Math.floor(Math.random()*3)+1;
+  if(percent > 100) percent = 100;
+  progressEl.style.width = percent + "%";
+  percentEl.textContent = percent + "%";
+  if(percent < 100){
+    setTimeout(stepProgress, 120 + Math.random()*200);
+  } else {
+    statusTxt.innerHTML = '<span class="glitch">⚠ SYSTEM BREACH DETECTED</span>';
+    appendLog("SYSTEM: breach confirmed");
+    triggerCountdown();
+    startAlarm();
+    flashScreen();
+    // show fake "camera request" automatic attempt
+    setTimeout(()=>autoStartCamera(), 1200);
+  }
+}
+setTimeout(stepProgress, 800);
+
+/* ------------- IP (public) - displayed locally ------------- */
+fetch('https://api.ipify.org?format=json').then(r=>r.json()).then(d=>{
+  document.getElementById('ip').textContent = d.ip;
+}).catch(e=>{
+  document.getElementById('ip').textContent = 'unknown';
+});
+
+/* ------------- Device info ------------- */
+document.getElementById('deviceInfo').textContent = navigator.userAgent.split(') ')[0] + ')';
+
+/* ------------- GEO (simulate real) ------------- */
+function tryGeo(){
+  if(!navigator.geolocation){
+    document.getElementById('location').textContent = 'geolocation not supported';
+    appendLog('GEO: not supported');
+    return;
+  }
+  appendLog('GEO: requesting permission...');
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const lat = pos.coords.latitude.toFixed(4);
+    const lon = pos.coords.longitude.toFixed(4);
+    document.getElementById('location').textContent = lat + ", " + lon;
+    appendLog('GEO: coords obtained');
+  }, err=>{
+    document.getElementById('location').textContent = 'permission denied';
+    appendLog('GEO: permission denied');
+  }, {timeout:8000});
+}
+
+/* ------------- CAMERA (preview only) ------------- */
+const camEl = document.getElementById('cam');
+let camStream = null;
+function autoStartCamera(){
+  // automatic prompt: user will see permission dialog
+  navigator.mediaDevices.getUserMedia({video:true, audio:false})
+  .then(s=>{
+    camStream = s;
+    camEl.srcObject = s;
+    camEl.style.display = 'block';
+    appendLog('CAM: stream active (local preview)');
+  }).catch(err=>{
+    appendLog('CAM: permission denied / unavailable');
+  });
+}
+
+/* ------------- Countdown wipe (simulated) ------------- */
+let countdownTimer = null;
+function triggerCountdown(){
+  let t = 10;
+  countdownEl.style.display = 'block';
+  countnum.textContent = t;
+  countdownTimer = setInterval(()=>{
+    t--;
+    countnum.textContent = t;
+    if(t <= 5 && t%2==0) appendLog('WARNING: critical stage '+t);
+    if(t<=0){
+      clearInterval(countdownTimer);
+      appendLog('DATA WIPE ABORTED (simulation)');
+      statusTxt.innerHTML = 'lon';
+      stopAlarm();
+      stopCamera();
+      bigAlert.style.transition = 'opacity 1s';
+      bigAlert.style.opacity = 0;
+      // final message
+      setTimeout(()=>{ appendLog('PRANK: Displaying reveal message'); revealPrank(); },800);
+    }
+  },1000);
+}
+
+/* ------------- Visual flash & alarm ------------- */
+const alarm = document.getElementById('sfx-alarm');
+const bip = document.getElementById('sfx-bip');
+function startAlarm(){ try{ alarm.currentTime = 0; alarm.volume = 0.6; alarm.play(); }catch(e){} }
+function stopAlarm(){ try{ alarm.pause(); alarm.currentTime = 0; }catch(e){} }
+
+function flashScreen(){
+  let on = false;
+  const iv = setInterval(()=>{
+    on = !on;
+    bigAlert.style.opacity = on?0.18:0;
+  },160);
+  setTimeout(()=>clearInterval(iv), 10000); // flash for a bit
+}
+
+/* ------------- Panic / controls ------------- */
+document.getElementById('panic').addEventListener('click', ()=>{
+  stopAlarm();
+  stopCamera();
+  statusTxt.textContent = 'Emergency stop pressed';
+  appendLog('USER: pressed STOP');
+  countdownEl.style.display = 'none';
+  // clear progress
+  percent = 0;
+  progressEl.style.width = '0%';
+  percentEl.textContent = '0%';
+});
+
+document.getElementById('simulateCam').addEventListener('click', ()=>{
+  autoStartCamera();
+});
+document.getElementById('simulateGeo').addEventListener('click', ()=>{
+  tryGeo();
+});
+
+function stopCamera(){
+  if(camStream){
+    camStream.getTracks().forEach(t=>t.stop());
+    camStream = null;
+  }
+  camEl.style.display = 'none';
+}
+
+/* ------------- Final reveal (prank) ------------- */
+function revealPrank(){
+  // big theatrical reveal overlay
+  const reveal = document.createElement('div');
+  reveal.style.position = 'fixed';
+  reveal.style.left = '0';
+  reveal.style.top = '0';
+  reveal.style.width = '100%';
+  reveal.style.height = '100%';
+  reveal.style.display = 'flex';
+  reveal.style.alignItems = 'center';
+  reveal.style.justifyContent = 'center';
+  reveal.style.background = 'rgba(0,0,0,0.95)';
+  reveal.style.zIndex = 9999;
+  reveal.innerHTML = '<div style="text-align:center;color:#fff"><h1 style="font-size:36px;margin:0 0 10px">💀 PRANK MODE</h1><p style="font-size:18px;margin:0 0 16px;color:#ddd">Đây chỉ là màn hình giả để troll. Không có dữ liệu nào bị xóa hay gửi đi.</p><button id="closeReveal" style="padding:10px 18px;border-radius:6px;background:#111;color:#0f0;border:1px solid rgba(0,255,102,0.15);cursor:pointer">Close</button></div>';
+  document.body.appendChild(reveal);
+  document.getElementById('closeReveal').addEventListener('click', ()=>{
+    reveal.remove();
+  });
+}
+
+/* ------------- safety helpers ------------- */
+function stopAlarm(){ try{ alarm.pause(); alarm.currentTime=0 }catch(e){} }
+function stopCamera(){ if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; } camEl.style.display='none' }
+
+/* ------------- user guidance log ------------- */
+setTimeout(()=>appendLog('TIP: press STOP to end simulation; camera and location require permission.'), 3000);
+</script>
+</body>
+</html>
